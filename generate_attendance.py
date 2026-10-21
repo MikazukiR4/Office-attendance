@@ -52,6 +52,7 @@ def prepare_template(template_path, prepared_path):
                     # after the tab, so remove only the incompatible tab.
                     if DATE_PATTERN.search(paragraph_text):
                         dotted_space_runs = []
+                        has_existing_dotted_space = False
                         for run in paragraph.iter(f"{namespace}r"):
                             run_text = "".join(
                                 node.text or ""
@@ -60,6 +61,17 @@ def prepare_template(template_path, prepared_path):
                             if run_text and not run_text.strip():
                                 dotted_space_runs.append(run)
                                 run_properties = run.find(f"{namespace}rPr")
+                                existing_underline = (
+                                    run_properties.find(f"{namespace}u")
+                                    if run_properties is not None
+                                    else None
+                                )
+                                if (
+                                    existing_underline is not None
+                                    and existing_underline.get(f"{namespace}val")
+                                    == "dotted"
+                                ):
+                                    has_existing_dotted_space = True
                                 if run_properties is None:
                                     run_properties = etree.Element(f"{namespace}rPr")
                                     run.insert(0, run_properties)
@@ -73,23 +85,23 @@ def prepare_template(template_path, prepared_path):
                         for tab in paragraph.iter(f"{namespace}tab"):
                             run = tab.getparent()
                             tab.getparent().remove(tab)
-                            if not dotted_space_runs:
+                            if not has_existing_dotted_space:
                                 run_properties = run.find(f"{namespace}rPr")
                                 if run_properties is None:
                                     run_properties = etree.Element(f"{namespace}rPr")
                                     run.insert(0, run_properties)
+                                # Literal dots are used here because WordCraft
+                                # does not render underlined spaces from the
+                                # legacy guard template as visible leaders.
                                 underline = run_properties.find(f"{namespace}u")
-                                if underline is None:
-                                    underline = etree.SubElement(
-                                        run_properties, f"{namespace}u"
-                                    )
-                                underline.set(f"{namespace}val", "dotted")
+                                if underline is not None:
+                                    run_properties.remove(underline)
                                 text_node = run.find(f"{namespace}t")
                                 if text_node is None:
                                     text_node = etree.SubElement(
                                         run, f"{namespace}t"
                                     )
-                                text_node.text = "        "
+                                text_node.text = "...................."
                                 text_node.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
 
                     operations = []
