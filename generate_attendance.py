@@ -45,6 +45,15 @@ def prepare_template(template_path, prepared_path):
                     text_nodes = list(paragraph.iter(f"{namespace}t"))
                     paragraph_text = "".join(node.text or "" for node in text_nodes)
 
+                    # Word uses the first tab in the date line as a dotted tab
+                    # leader. WordCraft lays that tab out to a different
+                    # default stop, making the dots much longer than in Word.
+                    # The template already contains the short dotted spaces
+                    # after the tab, so remove only the incompatible tab.
+                    if DATE_PATTERN.search(paragraph_text):
+                        for tab in paragraph.iter(f"{namespace}tab"):
+                            tab.getparent().remove(tab)
+
                     operations = []
                     for match in DATE_PATTERN.finditer(paragraph_text):
                         operations.extend(
