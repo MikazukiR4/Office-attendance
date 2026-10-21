@@ -22,7 +22,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN mkdir -p /usr/local/share/fonts/th-sarabun \
-    && cp fonts/*.ttf /usr/local/share/fonts/th-sarabun/ \
+    && cp fonts/*.ttf fonts/*.TTC /usr/local/share/fonts/th-sarabun/ \
     && fc-cache -f
 
 EXPOSE 10000
