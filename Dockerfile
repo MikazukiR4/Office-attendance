@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     WORDCRAFT_CLI=/usr/local/bin/wordcraft-cli
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl fonts-noto-core tar \
+    && apt-get install -y --no-install-recommends ca-certificates curl fontconfig fonts-noto-core tar \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL -o /tmp/wordcraft.tar.gz \
        "https://github.com/storytold/wordcraft/releases/download/v${WORDCRAFT_VERSION}/wordcraft-${WORDCRAFT_VERSION}-linux-x86_64.tar.gz" \
@@ -21,6 +21,9 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
+RUN mkdir -p /usr/local/share/fonts/th-sarabun \
+    && cp fonts/*.ttf /usr/local/share/fonts/th-sarabun/ \
+    && fc-cache -f
 
 EXPOSE 10000
 CMD ["sh", "-c", "streamlit run app.py --server.address=0.0.0.0 --server.port=${PORT:-10000}"]
