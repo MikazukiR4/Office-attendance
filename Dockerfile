@@ -20,9 +20,12 @@ RUN apt-get update \
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir fonttools
 COPY . .
-RUN mkdir -p /usr/local/share/fonts/th-sarabun \
-    && cp fonts/*.ttf fonts/*.TTC /usr/local/share/fonts/th-sarabun/ \
+RUN python extract_ttc_fonts.py \
+    && mkdir -p /usr/local/share/fonts/templates \
+    && find fonts -type f \( -name '*.ttf' -o -name '*.TTC' \) \
+       -exec cp {} /usr/local/share/fonts/templates/ \; \
     && fc-cache -f
 
 EXPOSE 10000
