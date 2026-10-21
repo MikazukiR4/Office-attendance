@@ -495,9 +495,11 @@ def main():
 
         with st.container(border=True):
             st.subheader("3 · สร้างเอกสาร")
-            st.caption("ระบบจะแสดงตัวอย่างเอกสารทางด้านขวา หลังจากกดปุ่มนี้")
+            st.caption(
+                "ดูตัวอย่างได้ทางด้านขวา กดปุ่มนี้เมื่อต้องการสร้างไฟล์สำหรับดาวน์โหลดหรือพิมพ์"
+            )
             generate_clicked = st.button(
-                "สร้างเอกสาร",
+                "สร้างไฟล์สำหรับดาวน์โหลดและพิมพ์",
                 type="primary",
                 use_container_width=True,
             )
@@ -553,13 +555,14 @@ def main():
             project_dir = get_resource_dir()
             output_dir = get_output_dir()
             try:
-                generated = generate_documents(
-                    project_dir,
-                    output_dir,
-                    selected_category,
-                    month,
-                    year,
-                )
+                with st.spinner("กำลังสร้างไฟล์สำหรับดาวน์โหลดและพิมพ์..."):
+                    generated = generate_documents(
+                        project_dir,
+                        output_dir,
+                        selected_category,
+                        month,
+                        year,
+                    )
             except Exception as error:
                 st.session_state.pop("generated_documents", None)
                 st.error(f"สร้างเอกสารไม่สำเร็จ: {error}")
@@ -591,6 +594,7 @@ def main():
                 type="primary",
                 use_container_width=True,
             )
+            st.caption("ดาวน์โหลดเอกสารทั้งชุด: ปกและตารางลงเวลา")
             st.divider()
             st.subheader("พิมพ์เอกสาร")
             print_page = st.selectbox(
@@ -602,12 +606,19 @@ def main():
                 }[value],
                 key="print_page",
             )
-            st.caption("จำนวนสำเนาจะกำหนดในหน้าต่าง Print")
+            st.caption(
+                "กดปุ่มพิมพ์แล้วหน้าต่าง Print จะเปิดขึ้น เพื่อเลือกเครื่องพิมพ์และจำนวนสำเนา"
+            )
             print_pdf = make_print_pdf(
                 result["documents"],
                 print_page,
             )
             render_print_button(print_pdf, "selected-page")
+        elif result:
+            st.info(
+                "ข้อมูลที่เลือกเปลี่ยนไปแล้ว กรุณากดปุ่มสร้างไฟล์อีกครั้ง "
+                "เพื่อให้เอกสารตรงกับข้อมูลล่าสุด"
+            )
 
     with preview_column:
         result = st.session_state.get("generated_documents")
