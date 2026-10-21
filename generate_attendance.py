@@ -30,10 +30,6 @@ def prepare_template(template_path, prepared_path):
                 r"word/(?:header|footer)\d+\.xml", item.filename
             ):
                 root = etree.fromstring(source.read(item.filename))
-                for fonts in root.iter(f"{namespace}rFonts"):
-                    for attribute, value in list(fonts.attrib.items()):
-                        if value == "Angsana New":
-                            fonts.set(attribute, "TH SarabunPSK")
                 for paragraph in root.iter(f"{namespace}p"):
                     text_nodes = list(paragraph.iter(f"{namespace}t"))
                     paragraph_text = "".join(node.text or "" for node in text_nodes)
