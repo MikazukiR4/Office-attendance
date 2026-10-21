@@ -4,6 +4,7 @@ import hashlib
 import os
 import sys
 import tempfile
+import time
 from datetime import date
 from pathlib import Path
 
@@ -17,6 +18,8 @@ CATEGORY_LABELS = {
     "government": "พนักงานราชการ",
     "guard": "ยามรักษาการณ์",
 }
+PREVIEW_CACHE_MAX_FILES = 36
+PREVIEW_CACHE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
 
 def get_resource_dir():
@@ -34,7 +37,6 @@ def get_output_dir():
 @st.cache_data(show_spinner=False, max_entries=12)
 def render_document_bytes(project_dir, category, month, year, template_signature):
     """Render templates and cache their PDF bytes until a template changes."""
-    import pymupdf
     from docxtpl import DocxTemplate
 
     from generate_attendance import (
@@ -85,19 +87,28 @@ def render_document_bytes(project_dir, category, month, year, template_signature
                 "pdf_bytes": pdf_path.read_bytes(),
             }
 
-        with pymupdf.open() as combined_pdf:
-            for document_type in ("Cover", "Table"):
-                document_pdf = pymupdf.open(
-                    stream=generated[document_type]["pdf_bytes"],
-                    filetype="pdf",
-                )
-                try:
-                    combined_pdf.insert_pdf(document_pdf)
-                finally:
-                    document_pdf.close()
-            generated["Combined"] = {"pdf_bytes": combined_pdf.tobytes()}
+        generated["Combined"] = {
+            "pdf_bytes": combine_pdf_bytes(generated)
+        }
 
     return generated
+
+
+def combine_pdf_bytes(documents):
+    """Combine cover and attendance PDFs in the required order."""
+    import pymupdf
+
+    with pymupdf.open() as combined_pdf:
+        for document_type in ("Cover", "Table"):
+            document_pdf = pymupdf.open(
+                stream=documents[document_type]["pdf_bytes"],
+                filetype="pdf",
+            )
+            try:
+                combined_pdf.insert_pdf(document_pdf)
+            finally:
+                document_pdf.close()
+        return combined_pdf.tobytes()
 
 
 def generate_documents(project_dir, output_dir, category, month, year):
@@ -130,7 +141,7 @@ def generate_documents(project_dir, output_dir, category, month, year):
 
 
 def get_template_signature(project_dir, category):
-    """Validate templates and return a cache key that changes with their contents."""
+    """Validate templates and return a cache key based on their contents."""
     for template_name in TEMPLATES[category].values():
         template_path = project_dir / template_name
         if not template_path.is_file():
@@ -138,27 +149,52 @@ def get_template_signature(project_dir, category):
     return tuple(
         (
             template_name,
-            (project_dir / template_name).stat().st_mtime_ns,
-            (project_dir / template_name).stat().st_size,
+            hashlib.sha256((project_dir / template_name).read_bytes()).hexdigest(),
         )
         for template_name in TEMPLATES[category].values()
     )
 
 
 def save_preview_pdfs(documents, static_dir, cache_key):
-    """Write preview PDFs to stable URLs so cached previews remain reusable."""
+    """Write cached preview PDFs and prune expired or excess files."""
     preview_dir = static_dir / "preview"
     preview_dir.mkdir(parents=True, exist_ok=True)
 
     token = hashlib.sha256(repr(cache_key).encode("utf-8")).hexdigest()[:20]
     urls = {}
+    protected_paths = set()
     for document_type, document in documents.items():
         filename = f"preview_{token}_{document_type.lower()}.pdf"
         preview_path = preview_dir / filename
         if not preview_path.is_file():
             preview_path.write_bytes(document["pdf_bytes"])
+        protected_paths.add(preview_path)
         urls[document_type] = f"/app/static/preview/{filename}"
+    prune_preview_pdfs(preview_dir, protected_paths)
     return urls
+
+
+def prune_preview_pdfs(preview_dir, protected_paths=(), now=None):
+    """Keep active previews and prune old files beyond the configured cache limit."""
+    now = now if now is not None else time.time()
+    expiry = now - PREVIEW_CACHE_MAX_AGE_SECONDS
+    protected_paths = {path.resolve() for path in protected_paths}
+    files = sorted(
+        preview_dir.glob("preview_*.pdf"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    kept_count = sum(path.resolve() in protected_paths for path in files)
+    for preview_path in files:
+        if preview_path.resolve() in protected_paths:
+            continue
+        elif (
+            preview_path.stat().st_mtime < expiry
+            or kept_count >= PREVIEW_CACHE_MAX_FILES
+        ):
+            preview_path.unlink()
+        else:
+            kept_count += 1
 
 
 def main():
@@ -414,6 +450,7 @@ def main():
 
         project_dir = get_resource_dir()
         preview_key = None
+        preview_url = None
         preview_cache = st.session_state.setdefault("document_preview_cache", {})
         try:
             template_signature = get_template_signature(
@@ -426,7 +463,15 @@ def main():
                 int(year),
                 template_signature,
             )
-            if preview_key not in preview_cache:
+            preview_url = preview_cache.get(preview_key)
+            preview_file_exists = (
+                preview_url
+                and (
+                    project_dir / "static" / "preview" / Path(preview_url).name
+                ).is_file()
+            )
+            if not preview_file_exists:
+                preview_url = None
                 with st.spinner("กำลังเตรียมตัวอย่าง PDF..."):
                     preview_documents = render_document_bytes(
                         str(project_dir),
@@ -440,7 +485,12 @@ def main():
                         project_dir / "static",
                         preview_key,
                     )
-                    preview_cache[preview_key] = preview_urls["Combined"]
+                    preview_url = preview_urls["Combined"]
+            if preview_key in preview_cache:
+                preview_cache.pop(preview_key)
+            preview_cache[preview_key] = preview_url
+            while len(preview_cache) > PREVIEW_CACHE_MAX_FILES:
+                preview_cache.pop(next(iter(preview_cache)))
         except Exception as error:
             st.error(f"แสดงตัวอย่างเอกสารไม่สำเร็จ: {error}")
             st.exception(error)
@@ -488,7 +538,6 @@ def main():
             )
 
     with preview_column:
-        preview_url = preview_cache.get(preview_key) if preview_key else None
         result = st.session_state.get("generated_documents")
         if preview_url:
             st.iframe(
