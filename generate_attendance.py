@@ -12,6 +12,9 @@ from docxtpl import DocxTemplate
 from lxml import etree
 
 
+ATTENDANCE_FONT_SIZE = "32"
+
+
 DATE_PATTERN = re.compile(
     r"(?P<month>มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|"
     r"สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม)"
@@ -26,7 +29,9 @@ def prepare_template(template_path, prepared_path):
 
     with ZipFile(template_path, "r") as source:
         document_root = etree.fromstring(source.read("word/document.xml"))
-        is_table_document = any(document_root.iter(f"{namespace}tbl"))
+        is_table_document = any(
+            True for _ in document_root.iter(f"{namespace}tbl")
+        )
         for item in source.infolist():
             if item.filename == "word/document.xml" or re.fullmatch(
                 r"word/(?:header|footer)\d+\.xml", item.filename
@@ -240,6 +245,83 @@ def convert_legacy_doc(template_path, docx_path):
     run_wordcraft_convert(template_path, docx_path)
 
 
+def _text_of(element, namespace):
+    """Return the concatenated text of every text node inside an element."""
+    return "".join(node.text or "" for node in element.iter(f"{namespace}t"))
+
+
+def _paragraph_has_content(paragraph, namespace):
+    """Report whether a paragraph shows anything on the printed page."""
+    if _text_of(paragraph, namespace).strip():
+        return True
+    if paragraph.find(f"{namespace}pPr/{namespace}sectPr") is not None:
+        # A paragraph that carries a section break must never be removed.
+        return True
+    return any(
+        paragraph.find(f".//{namespace}{name}") is not None
+        for name in ("drawing", "pict", "object")
+    )
+
+
+def enlarge_visible_runs(root, namespace):
+    """Raise every run that shows text to 16 pt when it is smaller."""
+    for run in root.iter(f"{namespace}r"):
+        if not _text_of(run, namespace).strip():
+            continue
+        run_properties = run.find(f"{namespace}rPr")
+        if run_properties is None:
+            run_properties = etree.Element(f"{namespace}rPr")
+            run.insert(0, run_properties)
+        for size_name in ("sz", "szCs"):
+            size = run_properties.find(f"{namespace}{size_name}")
+            if size is None:
+                size = etree.SubElement(run_properties, f"{namespace}{size_name}")
+                size.set(f"{namespace}val", ATTENDANCE_FONT_SIZE)
+            elif int(size.get(f"{namespace}val")) < int(ATTENDANCE_FONT_SIZE):
+                size.set(f"{namespace}val", ATTENDANCE_FONT_SIZE)
+
+
+def remove_trailing_empty_paragraphs(root, namespace):
+    """Drop the empty paragraphs that trail the body of the document.
+
+    The larger attendance text leaves the final empty paragraph of the guard
+    sheet without any room on the first page, which pushed a blank page into
+    the PDF. Removing the trailing empty paragraphs keeps the sheet on one
+    page without touching any visible content.
+    """
+    body = root.find(f"{namespace}body")
+    if body is None:
+        return
+    for paragraph in reversed(body.findall(f"{namespace}p")):
+        if _paragraph_has_content(paragraph, namespace):
+            break
+        body.remove(paragraph)
+
+
+def enforce_attendance_font_size(source_path, destination_path):
+    """Write a copy of a rendered attendance sheet with all text at 16 pt."""
+    namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    content_parts = re.compile(r"word/(?:document|header\d+|footer\d+)\.xml")
+
+    with ZipFile(source_path, "r") as source, ZipFile(
+        destination_path, "w", compression=ZIP_DEFLATED
+    ) as destination:
+        for item in source.infolist():
+            if content_parts.fullmatch(item.filename):
+                root = etree.fromstring(source.read(item.filename))
+                enlarge_visible_runs(root, namespace)
+                remove_trailing_empty_paragraphs(root, namespace)
+                data = etree.tostring(
+                    root,
+                    encoding="UTF-8",
+                    xml_declaration=True,
+                    standalone=True,
+                )
+            else:
+                data = source.read(item.filename)
+            destination.writestr(item, data)
+
+
 def convert_to_pdf(docx_path, pdf_path):
     """Convert a document to PDF through the headless WordCraft CLI."""
     run_wordcraft_convert(docx_path, pdf_path)
@@ -259,6 +341,8 @@ def run_wordcraft_convert(input_path, output_path):
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except FileNotFoundError as error:
         raise RuntimeError(

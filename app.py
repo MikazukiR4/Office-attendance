@@ -80,6 +80,7 @@ def render_document_bytes(project_dir, category, month, year, template_signature
 
     from generate_attendance import (
         convert_legacy_doc,
+        enforce_attendance_font_size,
         prepare_template,
         convert_to_pdf,
     )
@@ -111,7 +112,12 @@ def render_document_bytes(project_dir, category, month, year, template_signature
 
             template = DocxTemplate(str(prepared_path))
             template.render({"month": month, "year": str(year)})
-            template.save(str(docx_path))
+            if document_type == "Table":
+                raw_docx_path = temporary_dir / f"{document_type}_raw.docx"
+                template.save(str(raw_docx_path))
+                enforce_attendance_font_size(raw_docx_path, docx_path)
+            else:
+                template.save(str(docx_path))
 
         for docx_path in rendered_dir.glob("*.docx"):
             convert_to_pdf(docx_path, pdf_dir / f"{docx_path.stem}.pdf")
