@@ -109,6 +109,26 @@ def combine_pdf_bytes(documents):
         return combined_pdf.tobytes()
 
 
+def make_print_pdf(documents, document_type, copies):
+    """Create a PDF containing one selected document repeated for printing."""
+    import pymupdf
+
+    if copies < 1:
+        raise ValueError("copies must be at least 1")
+
+    with pymupdf.open() as print_pdf:
+        source_pdf = pymupdf.open(
+            stream=documents[document_type]["pdf_bytes"],
+            filetype="pdf",
+        )
+        try:
+            for _ in range(copies):
+                print_pdf.insert_pdf(source_pdf)
+        finally:
+            source_pdf.close()
+        return print_pdf.tobytes()
+
+
 def generate_documents(project_dir, output_dir, category, month, year):
     """Write generated Word files and the combined PDF to the output folder."""
     project_dir = Path(project_dir)
@@ -440,6 +460,21 @@ def main():
 
         with st.container(border=True):
             st.subheader("3 · ดำเนินการ")
+            print_page = st.selectbox(
+                "หน้าที่ต้องการพิมพ์",
+                options=("Cover", "Table"),
+                format_func=lambda value: {
+                    "Cover": "หน้า ปก",
+                    "Table": "หน้า ตารางลงเวลา",
+                }[value],
+            )
+            print_copies = st.number_input(
+                "จำนวนแผ่น",
+                min_value=1,
+                max_value=100,
+                value=1,
+                step=1,
+            )
             generate_clicked = st.button(
                 "สร้าง PDF ฉบับรวม",
                 type="primary",
@@ -532,6 +567,22 @@ def main():
                 mime="application/pdf",
                 key="download_combined",
                 type="primary",
+                use_container_width=True,
+            )
+            print_pdf = make_print_pdf(
+                result["documents"],
+                print_page,
+                int(print_copies),
+            )
+            st.download_button(
+                f"ดาวน์โหลด {print_page} สำหรับพิมพ์ {int(print_copies)} แผ่น",
+                data=print_pdf,
+                file_name=(
+                    f"{selected_category}_{print_page}_{month}_{int(year)}_"
+                    f"{int(print_copies)}copies.pdf"
+                ),
+                mime="application/pdf",
+                key="download_print_page",
                 use_container_width=True,
             )
 
