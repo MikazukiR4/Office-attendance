@@ -2,14 +2,13 @@
 
 import os
 import re
+import subprocess
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from attendance_config import MONTHS, TEMPLATES
 from docxtpl import DocxTemplate
-from docx2pdf import convert
 from lxml import etree
 
 
@@ -18,18 +17,6 @@ DATE_PATTERN = re.compile(
     r"สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม)"
     r"\s*(?:พ\.ศ\.\s*)?(?P<year>[๐-๙0-9]{4})"
 )
-
-
-@contextmanager
-def initialized_com():
-    """Initialize COM on the current thread for Microsoft Word automation."""
-    import pythoncom
-
-    pythoncom.CoInitialize()
-    try:
-        yield
-    finally:
-        pythoncom.CoUninitialize()
 
 
 def prepare_template(template_path, prepared_path):
@@ -132,33 +119,48 @@ def prepare_template(template_path, prepared_path):
 
 
 def convert_legacy_doc(template_path, docx_path):
-    """Save a legacy .doc file as .docx through Microsoft Word."""
-    from win32com.client import DispatchEx
-
-    with initialized_com():
-        word = DispatchEx("Word.Application")
-        document = None
-        try:
-            word.Visible = False
-            word.DisplayAlerts = 0
-            document = word.Documents.Open(
-                str(template_path.resolve()),
-                ReadOnly=True,
-                AddToRecentFiles=False,
-            )
-            document.SaveAs2(str(docx_path.resolve()), FileFormat=16)
-        finally:
-            try:
-                if document is not None:
-                    document.Close(False)
-            finally:
-                word.Quit()
+    """Convert a legacy .doc file to .docx through WordCraft CLI."""
+    run_wordcraft_convert(template_path, docx_path)
 
 
 def convert_to_pdf(docx_path, pdf_path):
-    """Convert a Word document to PDF with COM initialized on this thread."""
-    with initialized_com():
-        convert(str(docx_path), str(pdf_path))
+    """Convert a document to PDF through the headless WordCraft CLI."""
+    run_wordcraft_convert(docx_path, pdf_path)
+
+
+def run_wordcraft_convert(input_path, output_path):
+    """Run WordCraft's headless converter and validate its output."""
+    cli = os.environ.get("WORDCRAFT_CLI", "wordcraft-cli")
+    try:
+        result = subprocess.run(
+            [
+                cli,
+                "convert",
+                str(Path(input_path).resolve()),
+                str(Path(output_path).resolve()),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            "WordCraft CLI was not found. Install WordCraft and set "
+            "WORDCRAFT_CLI to the wordcraft-cli executable."
+        ) from error
+    except subprocess.CalledProcessError as error:
+        details = (error.stderr or error.stdout or "").strip()
+        raise RuntimeError(
+            f"WordCraft failed to convert {input_path} to {output_path}"
+            + (f": {details}" if details else ".")
+        ) from error
+
+    if not Path(output_path).is_file():
+        details = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(
+            f"WordCraft completed without creating {output_path}"
+            + (f": {details}" if details else ".")
+        )
 
 
 def get_render_context():
@@ -215,7 +217,7 @@ def main():
 
     for docx_path in generated_docs:
         pdf_path = docx_path.with_suffix(".pdf")
-        convert(str(docx_path), str(pdf_path))
+        convert_to_pdf(docx_path, pdf_path)
         print(f"Created PDF: {pdf_path}")
 
 

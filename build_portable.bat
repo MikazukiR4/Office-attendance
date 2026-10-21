@@ -21,13 +21,8 @@ if errorlevel 1 (
     --collect-all streamlit ^
     --collect-all docxtpl ^
     --collect-all docx ^
-    --collect-all docx2pdf ^
     --collect-all lxml ^
     --collect-all pymupdf ^
-    --collect-all win32com ^
-    --hidden-import pythoncom ^
-    --hidden-import pywintypes ^
-    --hidden-import win32timezone ^
     --add-data "app.py;." ^
     --add-data "attendance_config.py;." ^
     --add-data "generate_attendance.py;." ^
@@ -48,6 +43,6 @@ if errorlevel 1 (
 
 echo.
 echo Portable app created: %~dp0dist\AttendanceGenerator.exe
-echo Microsoft Word must be installed on the target computer.
+echo WordCraft CLI must be installed and available on PATH on the target computer.
 pause
 endlocal
