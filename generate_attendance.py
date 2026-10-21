@@ -51,8 +51,46 @@ def prepare_template(template_path, prepared_path):
                     # The template already contains the short dotted spaces
                     # after the tab, so remove only the incompatible tab.
                     if DATE_PATTERN.search(paragraph_text):
+                        dotted_space_runs = []
+                        for run in paragraph.iter(f"{namespace}r"):
+                            run_text = "".join(
+                                node.text or ""
+                                for node in run.iter(f"{namespace}t")
+                            )
+                            if run_text and not run_text.strip():
+                                dotted_space_runs.append(run)
+                                run_properties = run.find(f"{namespace}rPr")
+                                if run_properties is None:
+                                    run_properties = etree.Element(f"{namespace}rPr")
+                                    run.insert(0, run_properties)
+                                underline = run_properties.find(f"{namespace}u")
+                                if underline is None:
+                                    underline = etree.SubElement(
+                                        run_properties, f"{namespace}u"
+                                    )
+                                underline.set(f"{namespace}val", "dotted")
+
                         for tab in paragraph.iter(f"{namespace}tab"):
+                            run = tab.getparent()
                             tab.getparent().remove(tab)
+                            if not dotted_space_runs:
+                                run_properties = run.find(f"{namespace}rPr")
+                                if run_properties is None:
+                                    run_properties = etree.Element(f"{namespace}rPr")
+                                    run.insert(0, run_properties)
+                                underline = run_properties.find(f"{namespace}u")
+                                if underline is None:
+                                    underline = etree.SubElement(
+                                        run_properties, f"{namespace}u"
+                                    )
+                                underline.set(f"{namespace}val", "dotted")
+                                text_node = run.find(f"{namespace}t")
+                                if text_node is None:
+                                    text_node = etree.SubElement(
+                                        run, f"{namespace}t"
+                                    )
+                                text_node.text = "        "
+                                text_node.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
 
                     operations = []
                     for match in DATE_PATTERN.finditer(paragraph_text):
