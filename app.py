@@ -1,9 +1,9 @@
 """Streamlit app for generating monthly attendance covers and tables."""
 
+import hashlib
 import os
+import sys
 import tempfile
-import time
-import uuid
 from datetime import date
 from pathlib import Path
 
@@ -17,6 +17,18 @@ CATEGORY_LABELS = {
     "government": "พนักงานราชการ",
     "guard": "ยามรักษาการณ์",
 }
+
+
+def get_resource_dir():
+    """Return the bundled resource directory or the source directory."""
+    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+
+
+def get_output_dir():
+    """Keep generated documents beside a packaged app or source project."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "output"
+    return Path(__file__).resolve().parent / "output"
 
 
 @st.cache_data(show_spinner=False, max_entries=12)
@@ -93,18 +105,7 @@ def generate_documents(project_dir, output_dir, category, month, year):
     project_dir = Path(project_dir)
     output_dir = Path(output_dir)
     os.makedirs(output_dir, exist_ok=True)
-    for template_name in TEMPLATES[category].values():
-        template_path = project_dir / template_name
-        if not template_path.is_file():
-            raise FileNotFoundError(f"Template not found: {template_path}")
-    template_signature = tuple(
-        (
-            template_name,
-            (project_dir / template_name).stat().st_mtime_ns,
-            (project_dir / template_name).stat().st_size,
-        )
-        for template_name in TEMPLATES[category].values()
-    )
+    template_signature = get_template_signature(project_dir, category)
     generated = render_document_bytes(
         str(project_dir),
         category,
@@ -128,21 +129,34 @@ def generate_documents(project_dir, output_dir, category, month, year):
     return generated
 
 
-def save_preview_pdfs(documents, static_dir):
-    """Write preview PDFs to unique static URLs for the embedded viewer."""
+def get_template_signature(project_dir, category):
+    """Validate templates and return a cache key that changes with their contents."""
+    for template_name in TEMPLATES[category].values():
+        template_path = project_dir / template_name
+        if not template_path.is_file():
+            raise FileNotFoundError(f"Template not found: {template_path}")
+    return tuple(
+        (
+            template_name,
+            (project_dir / template_name).stat().st_mtime_ns,
+            (project_dir / template_name).stat().st_size,
+        )
+        for template_name in TEMPLATES[category].values()
+    )
+
+
+def save_preview_pdfs(documents, static_dir, cache_key):
+    """Write preview PDFs to stable URLs so cached previews remain reusable."""
     preview_dir = static_dir / "preview"
     preview_dir.mkdir(parents=True, exist_ok=True)
 
-    expiry = time.time() - 24 * 60 * 60
-    for stale_file in preview_dir.glob("preview_*.pdf"):
-        if stale_file.stat().st_mtime < expiry:
-            stale_file.unlink()
-
-    token = uuid.uuid4().hex
+    token = hashlib.sha256(repr(cache_key).encode("utf-8")).hexdigest()[:20]
     urls = {}
     for document_type, document in documents.items():
         filename = f"preview_{token}_{document_type.lower()}.pdf"
-        (preview_dir / filename).write_bytes(document["pdf_bytes"])
+        preview_path = preview_dir / filename
+        if not preview_path.is_file():
+            preview_path.write_bytes(document["pdf_bytes"])
         urls[document_type] = f"/app/static/preview/{filename}"
     return urls
 
@@ -153,14 +167,74 @@ def main():
         page_icon="🗓️",
         layout="wide",
     )
+    header_column, theme_column = st.columns((5, 1), vertical_alignment="center")
+    if not st.session_state.get("_dark_mode_default_set"):
+        st.session_state["dark_mode"] = True
+        st.session_state["_dark_mode_default_set"] = True
+
+    with theme_column:
+        dark_mode = st.toggle("โหมดมืด", key="dark_mode")
+
+    if dark_mode:
+        palette = {
+            "background": "#0b1220",
+            "surface": "#111c2e",
+            "surface_alt": "#17243a",
+            "border": "#29384d",
+            "text": "#e5edf7",
+            "muted": "#a8b6c9",
+            "accent": "#34b8a5",
+            "accent_hover": "#2aa18f",
+            "glow": "rgba(20, 105, 95, .20)",
+            "field_text": "#e5edf7",
+            "button_text": "#e5edf7",
+            "button_hover": "#22334b",
+        }
+    else:
+        palette = {
+            "background": "#f5f7fa",
+            "surface": "rgba(255, 255, 255, .92)",
+            "surface_alt": "#ffffff",
+            "border": "#e4eaf0",
+            "text": "#1e293b",
+            "muted": "#64748b",
+            "accent": "#117c70",
+            "accent_hover": "#0d685e",
+            "glow": "rgba(231, 244, 241, .9)",
+            "field_text": "#1e293b",
+            "button_text": "#1e293b",
+            "button_hover": "#f1f5f9",
+        }
+
+    st.markdown(
+        f"""
+        <style>
+        :root {{
+            --app-background: {palette["background"]};
+            --app-surface: {palette["surface"]};
+            --app-surface-alt: {palette["surface_alt"]};
+            --app-border: {palette["border"]};
+            --app-text: {palette["text"]};
+            --app-muted: {palette["muted"]};
+            --app-accent: {palette["accent"]};
+            --app-accent-hover: {palette["accent_hover"]};
+            --app-glow: {palette["glow"]};
+            --app-field-text: {palette["field_text"]};
+            --app-button-text: {palette["button_text"]};
+            --app-button-hover: {palette["button_hover"]};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown(
         """
         <style>
         .stApp {
             background:
-                radial-gradient(ellipse at 12% 0%, #e7f4f1 0, transparent 34%),
-                #f5f7fa;
-            color: #1e293b !important;
+                radial-gradient(ellipse at 12% 0%, var(--app-glow) 0, transparent 34%),
+                var(--app-background);
+            color: var(--app-text) !important;
         }
         [data-testid="stMainBlockContainer"] {
             max-width: 1600px;
@@ -173,56 +247,65 @@ def main():
         [data-testid="stCaptionContainer"],
         [data-testid="stMetricLabel"],
         [data-testid="stMetricValue"] {
-            color: #1e293b !important;
+            color: var(--app-text) !important;
         }
         h1, h2, h3, p, label, button, input {
             font-family: "Leelawadee UI", "Tahoma", sans-serif;
         }
         [data-testid="stSelectbox"] [role="group"] {
-            background: #fff !important;
-            border-color: #cbd5e1 !important;
+            background: var(--app-surface-alt) !important;
+            border-color: var(--app-border) !important;
         }
         [data-testid="stSelectbox"] input {
-            color: #1e293b !important;
+            color: var(--app-field-text) !important;
         }
         [data-testid="stSelectbox"] svg {
-            color: #475569 !important;
+            color: var(--app-muted) !important;
         }
         [data-testid="stNumberInput"] input {
-            background: #fff !important;
-            color: #1e293b !important;
+            background: var(--app-surface-alt) !important;
+            color: var(--app-field-text) !important;
+            border-color: var(--app-border) !important;
         }
         .app-eyebrow {
-            color: #117c70;
+            color: var(--app-accent);
             font-size: .9rem;
             font-weight: 700;
             letter-spacing: .04em;
             margin-bottom: .35rem;
         }
         .app-subtitle {
-            color: #64748b;
+            color: var(--app-muted);
             margin-top: -.5rem;
             margin-bottom: 1.7rem;
         }
         [data-testid="stVerticalBlockBorderWrapper"] {
-            background: rgba(255, 255, 255, .92);
-            border: 1px solid #e4eaf0;
+            background: var(--app-surface);
+            border: 1px solid var(--app-border);
             border-radius: 18px;
-            box-shadow: 0 8px 24px rgba(15, 34, 52, .045);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+        }
+        .stHorizontalBlock:has(iframe) > [data-testid="stColumn"]:first-child > [data-testid="stVerticalBlock"] {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .stHorizontalBlock:has(iframe) > [data-testid="stColumn"]:first-child > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] {
+            flex: 1 1 0;
         }
         [data-testid="stRadio"] [role="radiogroup"] {
             gap: .65rem;
         }
         [data-testid="stRadio"] label {
-            border: 1px solid #dce5eb;
+            border: 1px solid var(--app-border);
             border-radius: 12px;
             padding: .7rem 1rem;
-            background: #fff;
+            background: var(--app-surface-alt);
             transition: border-color .15s ease, background .15s ease;
         }
         [data-testid="stRadio"] label:has(input:checked) {
-            border-color: #16877a;
-            background: #eff9f7;
+            border-color: var(--app-accent);
+            background: var(--app-surface);
         }
         [data-testid="stButton"] button,
         [data-testid="stDownloadButton"] button {
@@ -232,35 +315,42 @@ def main():
         }
         [data-testid="stButton"] button[kind="primary"],
         [data-testid="stDownloadButton"] button[kind="primary"] {
-            background: #117c70;
-            border-color: #117c70;
+            background: var(--app-accent);
+            border-color: var(--app-accent);
             color: #fff !important;
         }
-        [data-testid="stButton"] button[kind="primary"]:hover {
-            background: #0d685e;
-            border-color: #0d685e;
+        [data-testid="stButton"] button[kind="primary"]:hover,
+        [data-testid="stDownloadButton"] button[kind="primary"]:hover {
+            background: var(--app-accent-hover);
+            border-color: var(--app-accent-hover);
             color: #fff !important;
         }
         [data-testid="stButton"] button:not([kind="primary"]),
         [data-testid="stDownloadButton"] button:not([kind="primary"]) {
-            background: #fff;
-            border: 1px solid #cbd5e1;
-            color: #1e293b !important;
+            background: var(--app-surface-alt);
+            border: 1px solid var(--app-border);
+            color: var(--app-button-text) !important;
         }
         [data-testid="stButton"] button:not([kind="primary"]):hover,
         [data-testid="stDownloadButton"] button:not([kind="primary"]):hover {
-            background: #f1f5f9;
-            border-color: #94a3b8;
-            color: #0f172a !important;
+            background: var(--app-button-hover);
+            border-color: var(--app-muted);
+            color: var(--app-text) !important;
         }
         [data-testid="stButton"] button[kind="primary"]:disabled {
-            background: #94a3b8;
-            border-color: #94a3b8;
+            background: var(--app-muted);
+            border-color: var(--app-muted);
             color: #fff !important;
         }
         [data-testid="stAlert"] p,
         [data-testid="stAlert"] div {
-            color: #1e293b !important;
+            color: var(--app-text) !important;
+        }
+        [data-baseweb="popover"],
+        [role="listbox"],
+        [role="option"] {
+            background: var(--app-surface-alt) !important;
+            color: var(--app-text) !important;
         }
         @media (max-width: 900px) {
             [data-testid="stMainBlockContainer"] {
@@ -279,21 +369,24 @@ def main():
     if "attendance_year" not in st.session_state:
         st.session_state["attendance_year"] = next_month_year
 
-    st.markdown('<div class="app-eyebrow">สำนักงานศึกษาธิการจังหวัดสมุทรสงคราม</div>', unsafe_allow_html=True)
-    st.title("ระบบสร้างเอกสารลงเวลา")
-    st.markdown(
-        '<p class="app-subtitle">สร้างปกและบัญชีลงเวลารายเดือน พร้อมดูตัวอย่างและดาวน์โหลด PDF</p>',
-        unsafe_allow_html=True,
-    )
+    with header_column:
+        st.markdown('<div class="app-eyebrow">สำนักงานศึกษาธิการจังหวัดสมุทรสงคราม</div>', unsafe_allow_html=True)
+        st.title("ระบบสร้างเอกสารลงเวลา")
+        st.markdown(
+            '<p class="app-subtitle">สร้างปกและบัญชีลงเวลารายเดือน พร้อมดูตัวอย่างและดาวน์โหลด PDF</p>',
+            unsafe_allow_html=True,
+        )
 
-    form_column, preview_column = st.columns((0.9, 1.1), gap="large")
+    form_column, preview_column = st.columns((1, 1), gap="large")
     with form_column:
         with st.container(border=True):
             st.subheader("1 · เลือกประเภทบุคลากร")
-            selected_category = st.selectbox(
+            selected_category = st.radio(
                 "ประเภทบุคลากร",
                 options=tuple(CATEGORY_LABELS),
                 format_func=lambda key: CATEGORY_LABELS[key],
+                horizontal=True,
+                label_visibility="collapsed",
             )
 
         with st.container(border=True):
@@ -313,46 +406,48 @@ def main():
 
         with st.container(border=True):
             st.subheader("3 · ดำเนินการ")
-            preview_clicked = st.button(
-                "ดูตัวอย่างก่อนสร้าง",
-                use_container_width=True,
-            )
             generate_clicked = st.button(
                 "สร้าง PDF ฉบับรวม",
                 type="primary",
                 use_container_width=True,
             )
 
-        if preview_clicked:
-            project_dir = Path(__file__).resolve().parent
-            try:
-                with tempfile.TemporaryDirectory() as preview_dir:
-                    preview_output_dir = Path(preview_dir) / "output"
-                    preview_documents = generate_documents(
-                        project_dir,
-                        preview_output_dir,
+        project_dir = get_resource_dir()
+        preview_key = None
+        preview_cache = st.session_state.setdefault("document_preview_cache", {})
+        try:
+            template_signature = get_template_signature(
+                project_dir,
+                selected_category,
+            )
+            preview_key = (
+                selected_category,
+                month,
+                int(year),
+                template_signature,
+            )
+            if preview_key not in preview_cache:
+                with st.spinner("กำลังเตรียมตัวอย่าง PDF..."):
+                    preview_documents = render_document_bytes(
+                        str(project_dir),
                         selected_category,
                         month,
-                        year,
+                        int(year),
+                        template_signature,
                     )
-                preview_urls = save_preview_pdfs(
-                    {"Combined": preview_documents["Combined"]},
-                    project_dir / "static",
-                )
-                st.session_state["document_preview"] = {
-                    "category": selected_category,
-                    "month": month,
-                    "year": int(year),
-                    "urls": preview_urls,
-                }
-            except Exception as error:
-                st.session_state.pop("document_preview", None)
-                st.error(f"แสดงตัวอย่างเอกสารไม่สำเร็จ: {error}")
-                st.exception(error)
+                    preview_urls = save_preview_pdfs(
+                        {"Combined": preview_documents["Combined"]},
+                        project_dir / "static",
+                        preview_key,
+                    )
+                    preview_cache[preview_key] = preview_urls["Combined"]
+        except Exception as error:
+            st.error(f"แสดงตัวอย่างเอกสารไม่สำเร็จ: {error}")
+            st.exception(error)
 
         if generate_clicked:
-            project_dir = Path(__file__).resolve().parent
-            output_dir = project_dir / "output"
+            project_dir = get_resource_dir()
+            output_dir = get_output_dir()
             try:
                 generated = generate_documents(
                     project_dir,
@@ -393,17 +488,9 @@ def main():
             )
 
     with preview_column:
-        preview = st.session_state.get("document_preview")
+        preview_url = preview_cache.get(preview_key) if preview_key else None
         result = st.session_state.get("generated_documents")
-        if (
-            preview
-            and preview["category"] == selected_category
-            and preview["month"] == month
-            and preview["year"] == int(year)
-        ):
-            preview_url = preview["urls"]["Combined"]
-            st.subheader("ตัวอย่าง PDF ฉบับรวม")
-            st.caption(f"{CATEGORY_LABELS[selected_category]} · {month} {year} · ปก → บัญชีลงเวลา")
+        if preview_url:
             st.iframe(
                 f"/app/static/embedpdf.html?src={preview_url}",
                 height=900,
@@ -421,7 +508,7 @@ def main():
             with st.container(border=True):
                 st.subheader("ตัวอย่างเอกสาร")
                 st.markdown("### ดู PDF ได้ในหน้านี้")
-                st.write("เลือกประเภทบุคลากรและรอบเดือนทางซ้าย จากนั้นกด “ดูตัวอย่างก่อนสร้าง”")
+                st.write("เลือกประเภทบุคลากรหรือเปลี่ยนรอบเดือนทางซ้าย เพื่อดูตัวอย่าง PDF")
                 st.caption("ตัวอย่างจะแสดงเป็นไฟล์เดียว เรียงจากปกไปยังบัญชีลงเวลา")
 
 

@@ -2,6 +2,11 @@
 __pycache__/
 *.py[cod]
 output/
+build/
+build-*/
+dist/
+dist-*/
+*.spec
 static/preview/
 .env
 .streamlit/secrets.toml
