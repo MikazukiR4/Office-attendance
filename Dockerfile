@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    WORDCRAFT_VERSION=0.8.0 \
+    WORDCRAFT_VERSION=0.9.0 \
     WORDCRAFT_CLI=/usr/local/bin/wordcraft-cli
 
 RUN apt-get update \
@@ -23,9 +23,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir fonttools
 COPY . .
 RUN python extract_ttc_fonts.py \
-    && mkdir -p /usr/local/share/fonts/templates \
+    && mkdir -p /usr/local/share/fonts/templates /root/.local/share/fonts \
     && find fonts -type f \( -name '*.ttf' -o -name '*.TTC' \) \
        -exec cp {} /usr/local/share/fonts/templates/ \; \
+    && cp /usr/local/share/fonts/templates/* /root/.local/share/fonts/ \
     && fc-cache -f
 
 EXPOSE 10000
