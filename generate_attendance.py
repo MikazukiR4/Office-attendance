@@ -41,6 +41,27 @@ def prepare_template(template_path, prepared_path):
                             del fonts.attrib[attribute]
                         for name in ("ascii", "hAnsi", "eastAsia", "cs"):
                             fonts.set(f"{namespace}{name}", "Angsana New")
+
+                # The three attendance-sheet templates contain tables; the
+                # cover templates do not. Set the direct font size of every
+                # run only in table documents so the whole attendance sheet
+                # renders at 16 pt without changing any cover page text.
+                if item.filename == "word/document.xml" and any(
+                    root.iter(f"{namespace}tbl")
+                ):
+                    for run in root.iter(f"{namespace}r"):
+                        run_properties = run.find(f"{namespace}rPr")
+                        if run_properties is None:
+                            run_properties = etree.Element(f"{namespace}rPr")
+                            run.insert(0, run_properties)
+                        for size_name in ("sz", "szCs"):
+                            size = run_properties.find(f"{namespace}{size_name}")
+                            if size is None:
+                                size = etree.SubElement(
+                                    run_properties, f"{namespace}{size_name}"
+                                )
+                            size.set(f"{namespace}val", "32")
+
                 for paragraph in root.iter(f"{namespace}p"):
                     text_nodes = list(paragraph.iter(f"{namespace}t"))
                     paragraph_text = "".join(node.text or "" for node in text_nodes)
