@@ -1,5 +1,6 @@
 """Streamlit app for generating monthly attendance covers and tables."""
 
+import base64
 import hashlib
 import os
 import sys
@@ -9,6 +10,7 @@ from datetime import date
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from attendance_config import MONTHS, TEMPLATES
 
@@ -20,6 +22,43 @@ CATEGORY_LABELS = {
 }
 PREVIEW_CACHE_MAX_FILES = 36
 PREVIEW_CACHE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+
+
+def render_print_button(pdf_bytes, key):
+    """Render a browser print button for the selected PDF bytes."""
+    encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
+    button_id = f"print-button-{key}"
+    components.html(
+        f"""
+        <button id="{button_id}" style="
+            width: 100%;
+            min-height: 42px;
+            border: 0;
+            border-radius: 8px;
+            background: #26b6aa;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        ">พิมพ์หน้าที่เลือก</button>
+        <script>
+        document.getElementById("{button_id}").addEventListener("click", () => {{
+            const binary = atob("{encoded_pdf}");
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index++) {{
+                bytes[index] = binary.charCodeAt(index);
+            }}
+            const pdfUrl = URL.createObjectURL(
+                new Blob([bytes], {{type: "application/pdf"}})
+            );
+            const printWindow = window.open(pdfUrl, "_blank");
+            if (printWindow) {{
+                setTimeout(() => printWindow.print(), 1200);
+            }}
+        }});
+        </script>
+        """,
+        height=55,
+    )
 
 
 def get_resource_dir():
@@ -109,12 +148,9 @@ def combine_pdf_bytes(documents):
         return combined_pdf.tobytes()
 
 
-def make_print_pdf(documents, document_type, copies):
-    """Create a PDF containing one selected document repeated for printing."""
+def make_print_pdf(documents, document_type):
+    """Create a PDF containing the selected document for printing."""
     import pymupdf
-
-    if copies < 1:
-        raise ValueError("copies must be at least 1")
 
     with pymupdf.open() as print_pdf:
         source_pdf = pymupdf.open(
@@ -122,8 +158,7 @@ def make_print_pdf(documents, document_type, copies):
             filetype="pdf",
         )
         try:
-            for _ in range(copies):
-                print_pdf.insert_pdf(source_pdf)
+            print_pdf.insert_pdf(source_pdf)
         finally:
             source_pdf.close()
         return print_pdf.tobytes()
@@ -459,24 +494,10 @@ def main():
             st.caption("ตั้งต้นเป็นเดือนถัดไปจากปัจจุบัน สามารถเปลี่ยนเดือนหรือปีได้")
 
         with st.container(border=True):
-            st.subheader("3 · ดำเนินการ")
-            print_page = st.selectbox(
-                "หน้าที่ต้องการพิมพ์",
-                options=("Cover", "Table"),
-                format_func=lambda value: {
-                    "Cover": "หน้า ปก",
-                    "Table": "หน้า ตารางลงเวลา",
-                }[value],
-            )
-            print_copies = st.number_input(
-                "จำนวนแผ่น",
-                min_value=1,
-                max_value=100,
-                value=1,
-                step=1,
-            )
+            st.subheader("3 · สร้างเอกสาร")
+            st.caption("ระบบจะแสดงตัวอย่างเอกสารทางด้านขวา หลังจากกดปุ่มนี้")
             generate_clicked = st.button(
-                "สร้าง PDF ฉบับรวม",
+                "สร้างเอกสาร",
                 type="primary",
                 use_container_width=True,
             )
@@ -550,7 +571,7 @@ def main():
                     "year": int(year),
                     "documents": generated,
                 }
-                st.success("สร้าง PDF ฉบับรวมเรียบร้อยแล้ว")
+                st.success("สร้างเอกสารเรียบร้อยแล้ว")
 
         result = st.session_state.get("generated_documents")
         if (
@@ -560,8 +581,9 @@ def main():
             and result["year"] == int(year)
         ):
             combined = result["documents"]["Combined"]
+            st.subheader("เอกสารพร้อมใช้งาน")
             st.download_button(
-                "ดาวน์โหลด PDF ฉบับรวม",
+                "ดาวน์โหลดปกและตาราง (PDF)",
                 data=combined["pdf_bytes"],
                 file_name=combined["file_name"],
                 mime="application/pdf",
@@ -569,22 +591,23 @@ def main():
                 type="primary",
                 use_container_width=True,
             )
+            st.divider()
+            st.subheader("พิมพ์เอกสาร")
+            print_page = st.selectbox(
+                "เลือกหน้าที่จะพิมพ์",
+                options=("Cover", "Table"),
+                format_func=lambda value: {
+                    "Cover": "หน้า ปก",
+                    "Table": "หน้า ตารางลงเวลา",
+                }[value],
+                key="print_page",
+            )
+            st.caption("จำนวนสำเนาจะกำหนดในหน้าต่าง Print")
             print_pdf = make_print_pdf(
                 result["documents"],
                 print_page,
-                int(print_copies),
             )
-            st.download_button(
-                f"ดาวน์โหลด {print_page} สำหรับพิมพ์ {int(print_copies)} แผ่น",
-                data=print_pdf,
-                file_name=(
-                    f"{selected_category}_{print_page}_{month}_{int(year)}_"
-                    f"{int(print_copies)}copies.pdf"
-                ),
-                mime="application/pdf",
-                key="download_print_page",
-                use_container_width=True,
-            )
+            render_print_button(print_pdf, "selected-page")
 
     with preview_column:
         result = st.session_state.get("generated_documents")
