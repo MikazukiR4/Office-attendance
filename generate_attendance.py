@@ -112,6 +112,17 @@ def prepare_template(template_path, prepared_path):
                                 text_nodes[index].text = ""
                             text_nodes[last].text = last_text[last_offset:]
 
+                # The table templates store their intended row heights but
+                # leave the height rule as the default "at least". WordCraft
+                # can expand those rows because its font metrics differ from
+                # Word, which pushes the second table onto another page.
+                # Preserve the authored heights when rendering through
+                # WordCraft so the two table blocks stay on the same page.
+                for row in root.iter(f"{namespace}tr"):
+                    row_height = row.find(f"{namespace}trPr/{namespace}trHeight")
+                    if row_height is not None and f"{namespace}hRule" not in row_height.attrib:
+                        row_height.set(f"{namespace}hRule", "exact")
+
                 xml_parts.append(
                     (
                         item.filename,
