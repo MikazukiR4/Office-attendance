@@ -25,10 +25,12 @@ def prepare_template(template_path, prepared_path):
     xml_parts = []
 
     with ZipFile(template_path, "r") as source:
+        document_root = etree.fromstring(source.read("word/document.xml"))
+        is_table_document = any(document_root.iter(f"{namespace}tbl"))
         for item in source.infolist():
             if item.filename == "word/document.xml" or re.fullmatch(
                 r"word/(?:header|footer)\d+\.xml", item.filename
-            ):
+            ) or (is_table_document and item.filename == "word/styles.xml"):
                 root = etree.fromstring(source.read(item.filename))
                 for fonts in root.iter(f"{namespace}rFonts"):
                     theme_attributes = {
@@ -46,14 +48,27 @@ def prepare_template(template_path, prepared_path):
                 # cover templates do not. Set the direct font size of every
                 # run only in table documents so the whole attendance sheet
                 # renders at 16 pt without changing any cover page text.
-                if item.filename == "word/document.xml" and any(
-                    root.iter(f"{namespace}tbl")
+                if is_table_document and item.filename in {
+                    "word/document.xml",
+                    "word/styles.xml",
+                } or (
+                    is_table_document
+                    and re.fullmatch(r"word/(?:header|footer)\d+\.xml", item.filename)
                 ):
                     for run in root.iter(f"{namespace}r"):
                         run_properties = run.find(f"{namespace}rPr")
                         if run_properties is None:
                             run_properties = etree.Element(f"{namespace}rPr")
                             run.insert(0, run_properties)
+                        for size_name in ("sz", "szCs"):
+                            size = run_properties.find(f"{namespace}{size_name}")
+                            if size is None:
+                                size = etree.SubElement(
+                                    run_properties, f"{namespace}{size_name}"
+                                )
+                            size.set(f"{namespace}val", "32")
+
+                    for run_properties in root.iter(f"{namespace}rPr"):
                         for size_name in ("sz", "szCs"):
                             size = run_properties.find(f"{namespace}{size_name}")
                             if size is None:
