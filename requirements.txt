@@ -1,0 +1,6 @@
+python-docx
+docxtpl
+docx2pdf
+pywin32
+streamlit
+pymupdf
