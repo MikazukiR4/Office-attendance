@@ -147,6 +147,21 @@ def prepare_template(template_path, prepared_path):
 
                     operations = []
                     for match in DATE_PATTERN.finditer(paragraph_text):
+                        label_start = paragraph_text.find("วันที่")
+                        leader_start = label_start + len("วันที่")
+                        leader_text = paragraph_text[leader_start : match.start("month")]
+                        if (
+                            label_start >= 0
+                            and leader_text
+                            and not leader_text.strip()
+                        ):
+                            operations.append(
+                                (
+                                    leader_start,
+                                    match.start("month"),
+                                    "....................",
+                                )
+                            )
                         operations.extend(
                             (
                                 (match.start("month"), match.end("month"), "{{month}}"),

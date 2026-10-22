@@ -145,6 +145,28 @@ class AttendanceFontSizeTests(unittest.TestCase):
             "only the single trailing empty paragraph should be removed",
         )
 
+    def test_guard_date_lines_have_dotted_leaders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = self.project_dir / TEMPLATES["guard"]["Table"]
+            converted_path = Path(directory) / "converted.docx"
+            prepared_path = Path(directory) / "prepared.docx"
+            convert_legacy_doc(source_path, converted_path)
+            prepare_template(converted_path, prepared_path)
+
+            with ZipFile(prepared_path) as document:
+                root = etree.fromstring(document.read("word/document.xml"))
+
+        date_lines = [
+            "".join(node.text or "" for node in paragraph.iter(f"{NAMESPACE}t"))
+            for paragraph in root.iter(f"{NAMESPACE}p")
+            if "{{month}}" in "".join(
+                node.text or "" for node in paragraph.iter(f"{NAMESPACE}t")
+            )
+        ]
+        self.assertEqual(len(date_lines), 2)
+        for line in date_lines:
+            self.assertIn("วันที่....................{{month}}", line)
+
     def test_guard_sheet_fits_on_a_single_page(self):
         if shutil.which(WORDCRAFT_CLI) is None:
             self.skipTest(f"WordCraft CLI not available: {WORDCRAFT_CLI}")
