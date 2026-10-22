@@ -165,7 +165,7 @@ class AttendanceFontSizeTests(unittest.TestCase):
         ]
         self.assertEqual(len(date_lines), 2)
         for line in date_lines:
-            self.assertIn("วันที่....................{{month}}", line)
+            self.assertIn("วันที่............{{month}}", line)
 
     def test_guard_sheet_fits_on_a_single_page(self):
         if shutil.which(WORDCRAFT_CLI) is None:

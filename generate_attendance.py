@@ -142,7 +142,7 @@ def prepare_template(template_path, prepared_path):
                                     text_node = etree.SubElement(
                                         run, f"{namespace}t"
                                     )
-                                text_node.text = "...................."
+                                text_node.text = "............"
                                 text_node.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
 
                     operations = []
@@ -159,7 +159,7 @@ def prepare_template(template_path, prepared_path):
                                 (
                                     leader_start,
                                     match.start("month"),
-                                    "....................",
+                                    "............",
                                 )
                             )
                         operations.extend(
