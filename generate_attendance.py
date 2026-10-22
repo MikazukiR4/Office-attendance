@@ -102,7 +102,7 @@ def prepare_template(template_path, prepared_path):
                                 (
                                     leader_start,
                                     match.start("month"),
-                                    "............",
+                                    "............ เดือน ",
                                 )
                             )
                         operations.extend(
