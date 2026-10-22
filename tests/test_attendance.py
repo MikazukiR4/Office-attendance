@@ -20,6 +20,9 @@ from attendance_config import TEMPLATES, is_valid_buddhist_year
 from generate_attendance import prepare_template
 
 
+NAMESPACE = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
 class AttendanceDocumentTests(unittest.TestCase):
     def test_government_agency_names_are_not_bold(self):
         project_dir = Path(__file__).resolve().parents[1]
