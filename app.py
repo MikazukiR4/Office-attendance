@@ -12,7 +12,13 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
-from attendance_config import MONTHS, TEMPLATES
+from attendance_config import (
+    BUDDHIST_YEAR_MAX,
+    BUDDHIST_YEAR_MIN,
+    MONTHS,
+    TEMPLATES,
+    is_valid_buddhist_year,
+)
 
 
 CATEGORY_LABELS = {
@@ -492,11 +498,14 @@ def main():
             with year_column:
                 year = st.number_input(
                     "ปี พ.ศ.",
-                    min_value=1,
-                    max_value=9999,
+                    min_value=BUDDHIST_YEAR_MIN,
+                    max_value=BUDDHIST_YEAR_MAX,
                     step=1,
                     key="attendance_year",
                 )
+            if not is_valid_buddhist_year(year):
+                st.error("กรุณาระบุปี พ.ศ. เป็นตัวเลข 4 หลัก")
+                st.stop()
             st.caption("ตั้งต้นเป็นเดือนถัดไปจากปัจจุบัน สามารถเปลี่ยนเดือนหรือปีได้")
 
         with st.container(border=True):

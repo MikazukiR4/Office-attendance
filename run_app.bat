@@ -45,6 +45,15 @@ if errorlevel 1 (
     type nul > "%~dp0.venv\attendance-dependencies-installed"
 )
 
+if not exist "%~dp0.tools\wordcraft\wordcraft-cli.exe" (
+    call "%~dp0setup_wordcraft.bat"
+    if errorlevel 1 (
+        echo WordCraft is required to generate DOCX and PDF files.
+        pause
+        exit /b 1
+    )
+)
+set "WORDCRAFT_CLI=%~dp0.tools\wordcraft\wordcraft-cli.exe"
 set "STREAMLIT_BROWSER_GATHER_USAGE_STATS=false"
 echo. | "%VENV_PYTHON%" -m streamlit run "%~dp0app.py"
 if errorlevel 1 (

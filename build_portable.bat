@@ -9,6 +9,13 @@ if not exist "%VENV_PYTHON%" (
     exit /b 1
 )
 
+call "%~dp0setup_wordcraft.bat"
+if errorlevel 1 (
+    echo WordCraft is required to build the portable app.
+    pause
+    exit /b 1
+)
+
 "%VENV_PYTHON%" -m pip install -r "%~dp0requirements-build.txt"
 if errorlevel 1 (
     echo Could not install packaging dependencies.
@@ -28,6 +35,7 @@ if errorlevel 1 (
     --add-data "generate_attendance.py;." ^
     --add-data ".streamlit\config.toml;.streamlit" ^
     --add-data "static\embedpdf.html;static" ^
+    --add-binary ".tools\wordcraft\wordcraft-cli.exe;.tools\wordcraft" ^
     --add-data "ปกลูกจ้าง.docx;." ^
     --add-data "บัญชีลงเวลาการปฏิบัติราชการของลูกจ้าง.docx;." ^
     --add-data "ปกพนักงานราชการ.docx;." ^
@@ -43,6 +51,6 @@ if errorlevel 1 (
 
 echo.
 echo Portable app created: %~dp0dist\AttendanceGenerator.exe
-echo WordCraft CLI must be installed and available on PATH on the target computer.
+echo WordCraft CLI is bundled in the portable app.
 pause
 endlocal

@@ -17,7 +17,7 @@ from app import (
     prune_preview_pdfs,
     save_preview_pdfs,
 )
-from attendance_config import TEMPLATES
+from attendance_config import TEMPLATES, is_valid_buddhist_year
 from generate_attendance import (
     convert_legacy_doc,
     convert_to_pdf,
@@ -27,7 +27,10 @@ from generate_attendance import (
 
 
 NAMESPACE = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-WORDCRAFT_CLI = os.environ.get("WORDCRAFT_CLI", "wordcraft-cli")
+WORDCRAFT_CLI = os.environ.get(
+    "WORDCRAFT_CLI",
+    str(Path(__file__).resolve().parents[1] / ".tools" / "wordcraft" / "wordcraft-cli.exe"),
+)
 
 
 class AttendanceFontSizeTests(unittest.TestCase):
@@ -170,6 +173,11 @@ class AttendanceFontSizeTests(unittest.TestCase):
 
 
 class AttendanceDocumentTests(unittest.TestCase):
+    def test_buddhist_year_requires_four_ascii_digits(self):
+        self.assertTrue(is_valid_buddhist_year("2569"))
+        self.assertFalse(is_valid_buddhist_year("256"))
+        self.assertFalse(is_valid_buddhist_year("๒๕๖๙"))
+
     def test_combined_pdf_opens_with_cover_before_table(self):
         documents = {
             "Cover": {"pdf_bytes": self.create_pdf(("Cover page 1", "Cover page 2"))},

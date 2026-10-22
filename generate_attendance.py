@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from attendance_config import MONTHS, TEMPLATES
+from attendance_config import MONTHS, TEMPLATES, is_valid_buddhist_year
 from docxtpl import DocxTemplate
 from lxml import etree
 
@@ -329,7 +329,13 @@ def convert_to_pdf(docx_path, pdf_path):
 
 def run_wordcraft_convert(input_path, output_path):
     """Run WordCraft's headless converter and validate its output."""
-    cli = os.environ.get("WORDCRAFT_CLI", "wordcraft-cli")
+    cli = os.environ.get("WORDCRAFT_CLI")
+    if not cli:
+        candidates = [
+            Path(__file__).resolve().parent / ".tools" / "wordcraft" / "wordcraft-cli.exe",
+            Path(__file__).resolve().parent / ".tools" / "wordcraft" / "wordcraft-cli",
+        ]
+        cli = next((str(path) for path in candidates if path.is_file()), "wordcraft-cli")
     try:
         result = subprocess.run(
             [
@@ -377,7 +383,7 @@ def get_render_context():
 
     while True:
         year = input("Enter Buddhist Era year (e.g., 2569): ").strip()
-        if year.isascii() and year.isdigit() and len(year) == 4:
+        if is_valid_buddhist_year(year):
             break
         print("Please enter a four-digit Buddhist Era year, such as 2569.")
 
