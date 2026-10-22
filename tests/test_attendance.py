@@ -167,6 +167,18 @@ class AttendanceFontSizeTests(unittest.TestCase):
         for line in date_lines:
             self.assertIn("วันที่............{{month}}", line)
 
+        dotted_placeholders = []
+        for paragraph in root.iter(f"{NAMESPACE}p"):
+            for run in paragraph.iter(f"{NAMESPACE}r"):
+                text = "".join(node.text or "" for node in run.iter(f"{NAMESPACE}t"))
+                if "{{month}}" in text or "{{year}}" in text:
+                    dotted_placeholders.append(
+                        run.find(f"{NAMESPACE}rPr/{NAMESPACE}u").get(
+                            f"{NAMESPACE}val"
+                        )
+                    )
+        self.assertEqual(dotted_placeholders, ["dotted", "dotted", "dotted", "dotted"])
+
     def test_guard_sheet_fits_on_a_single_page(self):
         if shutil.which(WORDCRAFT_CLI) is None:
             self.skipTest(f"WordCraft CLI not available: {WORDCRAFT_CLI}")

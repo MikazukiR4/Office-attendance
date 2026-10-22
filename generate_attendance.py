@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -20,6 +21,46 @@ DATE_PATTERN = re.compile(
     r"สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม)"
     r"\s*(?:พ\.ศ\.\s*)?(?P<year>[๐-๙0-9]{4})"
 )
+
+
+def _add_guard_date_dotted_underlines(paragraph, namespace):
+    """Put dotted underlines under the guard sheet's month and year fields."""
+    placeholder_pattern = re.compile(r"({{month}}|{{year}})")
+    for run in list(paragraph.iter(f"{namespace}r")):
+        text_nodes = list(run.iter(f"{namespace}t"))
+        if len(text_nodes) != 1 or not text_nodes[0].text:
+            continue
+        text_node = text_nodes[0]
+        parts = placeholder_pattern.split(text_node.text)
+        if len(parts) == 1:
+            continue
+
+        parent = run.getparent()
+        insert_at = parent.index(run)
+        for part in parts:
+            if not part:
+                continue
+            new_run = deepcopy(run)
+            for child in list(new_run):
+                if child.tag != f"{namespace}rPr":
+                    new_run.remove(child)
+            new_text = etree.SubElement(new_run, f"{namespace}t")
+            new_text.text = part
+            if part in {"{{month}}", "{{year}}"}:
+                run_properties = new_run.find(f"{namespace}rPr")
+                if run_properties is None:
+                    run_properties = etree.SubElement(new_run, f"{namespace}rPr")
+                underline = run_properties.find(f"{namespace}u")
+                if underline is None:
+                    underline = etree.SubElement(run_properties, f"{namespace}u")
+                underline.set(f"{namespace}val", "dotted")
+            if part[:1].isspace() or part[-1:].isspace():
+                new_text.set(
+                    "{http://www.w3.org/XML/1998/namespace}space", "preserve"
+                )
+            parent.insert(insert_at, new_run)
+            insert_at += 1
+        parent.remove(run)
 
 
 def prepare_template(template_path, prepared_path):
@@ -217,6 +258,12 @@ def prepare_template(template_path, prepared_path):
                             for index in range(first + 1, last):
                                 text_nodes[index].text = ""
                             text_nodes[last].text = last_text[last_offset:]
+
+                    if (
+                        paragraph_text.lstrip().startswith("วันที่")
+                        and "เดือน" not in paragraph_text
+                    ):
+                        _add_guard_date_dotted_underlines(paragraph, namespace)
 
                 # The table templates store their intended row heights but
                 # leave the height rule as the default "at least". WordCraft
