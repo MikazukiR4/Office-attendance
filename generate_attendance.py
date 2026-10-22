@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from attendance_config import MONTHS, TEMPLATES
+from attendance_config import MONTHS, TEMPLATES, is_valid_buddhist_year
 from docxtpl import DocxTemplate
 from docx2pdf import convert
 from lxml import etree
@@ -174,7 +174,7 @@ def get_render_context():
 
     while True:
         year = input("Enter Buddhist Era year (e.g., 2569): ").strip()
-        if year.isascii() and year.isdigit() and len(year) == 4:
+        if is_valid_buddhist_year(year):
             break
         print("Please enter a four-digit Buddhist Era year, such as 2569.")
 

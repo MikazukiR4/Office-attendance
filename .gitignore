@@ -10,3 +10,4 @@ dist-*/
 static/preview/
 .env
 .streamlit/secrets.toml
+.tools/
