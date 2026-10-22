@@ -28,6 +28,8 @@ CATEGORY_LABELS = {
 }
 PREVIEW_CACHE_MAX_FILES = 36
 PREVIEW_CACHE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+# Bump when document-rendering logic changes so old preview PDFs are rebuilt.
+PREVIEW_RENDER_VERSION = 2
 
 
 def render_print_button(pdf_bytes, key):
@@ -529,6 +531,7 @@ def main():
                 selected_category,
             )
             preview_key = (
+                PREVIEW_RENDER_VERSION,
                 selected_category,
                 month,
                 int(year),
