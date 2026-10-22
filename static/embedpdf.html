@@ -35,6 +35,56 @@
       const viewerTarget = document.getElementById("pdf-viewer");
       const errorTarget = document.getElementById("viewer-error");
 
+      function polishPageControls() {
+        const embedElement = viewerTarget.querySelector("embedpdf-container");
+        const shadowRoot = embedElement && embedElement.shadowRoot;
+        if (!shadowRoot || shadowRoot.querySelector("#attendance-viewer-polish")) {
+          return Boolean(shadowRoot);
+        }
+
+        const style = document.createElement("style");
+        style.id = "attendance-viewer-polish";
+        style.textContent = `
+          [data-epdf-i="page-controls"] {
+            bottom: .75rem !important;
+          }
+
+          [data-epdf-i="page-controls"] > div > div {
+            gap: 0 !important;
+            padding: 3px !important;
+            border-radius: 999px !important;
+            border-color: rgba(255, 255, 255, .14) !important;
+            background: rgba(17, 28, 46, .94) !important;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, .28) !important;
+          }
+
+          [data-epdf-i="page-controls"] button {
+            width: 30px !important;
+            min-width: 30px !important;
+            height: 30px !important;
+            padding: 4px !important;
+            border-radius: 999px !important;
+          }
+
+          [data-epdf-i="page-controls"] input {
+            width: 32px !important;
+            height: 26px !important;
+            border: 0 !important;
+            border-radius: 7px !important;
+            background: rgba(255, 255, 255, .12) !important;
+            font-size: 13px !important;
+          }
+
+          [data-epdf-i="page-controls"] span {
+            padding-right: 3px !important;
+            color: rgba(255, 255, 255, .72) !important;
+            font-size: 13px !important;
+          }
+        `;
+        shadowRoot.appendChild(style);
+        return true;
+      }
+
       if (!pdfUrl || !pdfUrl.startsWith("/app/static/preview/preview_")) {
         errorTarget.textContent = "ไม่พบไฟล์ PDF สำหรับแสดงตัวอย่าง";
         errorTarget.hidden = false;
@@ -45,6 +95,14 @@
             target: viewerTarget,
             src: pdfUrl,
           });
+          if (!polishPageControls()) {
+            const observer = new MutationObserver(() => {
+              if (polishPageControls()) {
+                observer.disconnect();
+              }
+            });
+            observer.observe(viewerTarget, { childList: true, subtree: true });
+          }
         } catch (error) {
           errorTarget.textContent = `เปิดตัวอย่าง PDF ไม่สำเร็จ: ${error.message}`;
           errorTarget.hidden = false;
