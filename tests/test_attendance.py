@@ -21,6 +21,28 @@ from generate_attendance import prepare_template
 
 
 class AttendanceDocumentTests(unittest.TestCase):
+    def test_government_agency_names_are_not_bold(self):
+        project_dir = Path(__file__).resolve().parents[1]
+        template_path = project_dir / TEMPLATES["government"]["Table"]
+        targets = (
+            "สำนักงานศึกษาธิการจังหวัดสมุทรสงคราม",
+            "สำนักงานปลัดกระทรวงศึกษาธิการ",
+        )
+
+        with ZipFile(template_path) as document:
+            root = etree.fromstring(document.read("word/document.xml"))
+
+        matching_runs = []
+        for run in root.iter(f"{NAMESPACE}r"):
+            text = "".join(node.text or "" for node in run.iter(f"{NAMESPACE}t"))
+            if any(target in text for target in targets):
+                matching_runs.append(run)
+
+        self.assertEqual(len(matching_runs), 4)
+        for run in matching_runs:
+            self.assertIsNone(run.find(f"{NAMESPACE}rPr/{NAMESPACE}b"))
+            self.assertIsNone(run.find(f"{NAMESPACE}rPr/{NAMESPACE}bCs"))
+
     def test_buddhist_year_requires_four_ascii_digits(self):
         self.assertTrue(is_valid_buddhist_year("2569"))
         self.assertFalse(is_valid_buddhist_year("256"))
