@@ -165,7 +165,7 @@ class AttendanceFontSizeTests(unittest.TestCase):
         ]
         self.assertEqual(len(date_lines), 2)
         for line in date_lines:
-            self.assertIn("วันที่............{{month}}", line)
+            self.assertIn("วันที่............ เดือน {{month}}", line)
 
         dotted_placeholders = []
         for paragraph in root.iter(f"{NAMESPACE}p"):
